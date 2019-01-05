@@ -1,0 +1,13 @@
+{
+  "name": "Connection Booster",
+  "description": "Find the optimal number of TCP connections.",
+  "version": "0.1",
+  "manifest_version": 2,
+  "app": {
+    "background": {
+      "scripts": ["background.js"]
+    }
+  },
+  "permissions": ["webview"],
+  "icons": { "128": "booster.png" }
+}
