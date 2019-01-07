@@ -5,6 +5,8 @@ chrome.app.runtime.onLaunched.addListener(function() {
       'width': 400,
       'height': 300
     }
+  }, function(win) {
+    win.maximize()
   });
 });
 

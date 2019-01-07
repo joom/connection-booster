@@ -6,15 +6,8 @@ document.addEventListener('DOMContentLoaded', function() {
   if (button) {
     button.addEventListener("click", function() {
       var url = document.getElementById("website").value.trim();
-
-      // open new webview with URL
-      chrome.app.window.create('webview.html', {hidden: true}, function(win) {
-        win.contentWindow.addEventListener('DOMContentLoaded', function(e) {
-            var webview = win.contentWindow.document.querySelector('webview');
-            webview.src = url;
-            win.show();
-        })
-      })
+      var webview = document.querySelector('webview');
+      webview.src = url;
     })
   }
 })

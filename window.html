@@ -1,15 +1,23 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <style>
+      html, body {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
   </head>
   <body>
-	<label for="website">Go to website:</label>
+    <label for="website">Go to website:</label>
 
-	<input type="text" id="website" name="website" required
-	       minlength="4" maxlength="100" size="50" value="https://">
-		   
-	<input type="submit" id="clickme" value="Go!">
-	
-	<script src="openweb.js"></script>
+    <input type="text" id="website" name="website" required
+          minlength="4" maxlength="100" size="50" value="https://">
+
+    <input type="submit" id="clickme" value="Go!">
+
+    <webview style="width:100%; height:100%"></webview>
+    <script src="openweb.js"></script>
+    <!-- <script src="sockets.js"></script> -->
   </body>
 </html>
