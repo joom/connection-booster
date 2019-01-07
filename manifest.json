@@ -8,7 +8,7 @@
       "scripts": ["background.js"]
     }
   },
-  "permissions": ["webview"],
+  "permissions": ["webview", "unlimitedStorage"],
   "sockets": {
           "tcp": {
               "connect": ""
