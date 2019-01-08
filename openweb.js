@@ -7,14 +7,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (button) {
     button.addEventListener("click", function() {
-      // var url = document.getElementById("website").value.trim();
-      // webview.src = url
+      var url = document.getElementById("website").value.trim();
+      webview.src = url
       // webview.stop()
       // console.log(webview.contentWindow)
-      webview.executeScript({code: `document.documentElement.innerHTML = "hey there"`}, function(results) {
-        // results[0] would have the webview's innerHTML.
-
-      });
+      // webview.executeScript({code: `document.documentElement.innerHTML = "hey there"`}, function(results) {
+      //   // results[0] would have the webview's innerHTML.
+      // });
     })
   }
 

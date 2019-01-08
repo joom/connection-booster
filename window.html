@@ -5,16 +5,27 @@
       html, body {
         width: 100%;
         height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      #bar {
+        width: 100%;
+        border: 1px solid black;
+        background: floralwhite;
+        padding: 5px;
       }
     </style>
   </head>
   <body>
-    <label for="website">Go to website:</label>
-
-    <input type="text" id="website" name="website" required
-          minlength="4" maxlength="100" size="50" value="http://cattheory.com">
-
-    <input type="submit" id="clickme" value="Go!">
+    <div id="bar">
+      <form>
+        <label for="website">Go to website:</label>
+        <input type="text" id="website" name="website" required
+               size="50" value="http://cattheory.com">
+        <input type="submit" id="clickme" value="Go!">
+      </form>
+    </div>
 
     <webview style="width:100%; height:100%"></webview>
     <script src="openweb.js"></script>
