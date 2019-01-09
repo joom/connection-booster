@@ -12,7 +12,6 @@ document.addEventListener('DOMContentLoaded', function() {
       // webview.stop()
       // console.log(webview.contentWindow)
       socketMagic(url, (res) => {
-        console.log(res);
         webview.src = "data:text/html," + res
 
         // webview.executeScript({code: `document.documentElement.innerHTML`}, function(results) {
@@ -22,11 +21,6 @@ document.addEventListener('DOMContentLoaded', function() {
       })
     })
   }
-
-  // webview.addEventListener("contentload", function(load) {
-  //   console.log(load);
-  //   webview.stop()
-  // })
 })
 
 var socketMagic = (urlString, cb) => {
@@ -45,17 +39,63 @@ var socketMagic = (urlString, cb) => {
     var socketId = createInfo.socketId
     chrome.sockets.tcp.connect(socketId, url.host, 80, (result) => {
       chrome.sockets.tcp.send(socketId, httpReqHeaderEnc, (sendInfo) => {
+        var chunk = 0
+        all = ``
+        var len = 0
+        var totalLen = 0
+
         chrome.sockets.tcp.onReceive.addListener((recvInfo) => {
-          // recvInfo.data is an arrayBuffer.
+          chunk++
+
           if (recvInfo.socketId != socketId) {
             return
           }
+
+          // recvInfo.data is an arrayBuffer.
           var res = dec.decode(recvInfo.data)
-          cb(res);
+
+          if (chunk === 1) {
+            var obj = parseHeaders(res)
+            all = all.concat(obj.body)
+            len += enc.encode(obj.body).byteLength
+            totalLen = parseInt(obj.headers["Content-Length"])
+          } else {
+            all = all.concat(res)
+            len += recvInfo.data.byteLength
+          }
+
+          console.log(`Chunk ${chunk}, Len: ${len}, TotalLen: ${totalLen}`);
+
+          if(len >= totalLen) {
+            cb(all);
+            chrome.sockets.tcp.disconnect(socketId);
+          }
+        })
+
+        chrome.sockets.tcp.onReceiveError.addListener((errInfo) => {
           chrome.sockets.tcp.disconnect(socketId);
         })
       })
     })
   })
-
 }
+
+var parseHeaders = (res) => {
+  var s = "\r\n\r\n"
+  var ind = res.indexOf(s)
+  var headers = res.slice(0,ind)
+  var body = res.slice(ind + s.length)
+  var obj = {headers: {}}
+
+  headers.split("\r\n").forEach((line) => {
+    var ind = line.indexOf(": ")
+    var key = line.slice(0, ind)
+    var val = line.slice(ind + 2)
+    obj.headers[key] = val
+  })
+  obj.body = body
+  console.log(obj)
+
+  return obj
+}
+
