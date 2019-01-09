@@ -11,8 +11,9 @@ document.addEventListener('DOMContentLoaded', function() {
       // webview.src = url
       // webview.stop()
       // console.log(webview.contentWindow)
-      socketMagic(url, (res) => {
-        webview.src = "data:text/html," + res
+      socketMagic(url, (body, obj) => {
+        webview.src = `data:${obj.mimeType},${body}`
+        domMagic(url, body, obj.mimeType)
 
         // webview.executeScript({code: `document.documentElement.innerHTML`}, function(results) {
         //   // results[0] would have the webview's innerHTML.
@@ -22,6 +23,26 @@ document.addEventListener('DOMContentLoaded', function() {
     })
   }
 })
+
+var parseHeaders = (res) => {
+  var s = "\r\n\r\n"
+  var ind = res.indexOf(s)
+  var headers = res.slice(0,ind)
+  var body = res.slice(ind + s.length)
+  var obj = {headers: {}}
+
+  headers.split("\r\n").forEach((line) => {
+    var ind = line.indexOf(": ")
+    var key = line.slice(0, ind)
+    var val = line.slice(ind + 2)
+    obj.headers[key] = val
+  })
+
+  obj.body = body
+  obj.mimeType = obj.headers["Content-Type"].slice(0, obj.headers["Content-Type"].indexOf("; "))
+  return obj
+}
+
 
 var socketMagic = (urlString, cb) => {
   // make sure url starts with http://
@@ -43,6 +64,7 @@ var socketMagic = (urlString, cb) => {
         all = ``
         var len = 0
         var totalLen = 0
+        var obj = {}
 
         chrome.sockets.tcp.onReceive.addListener((recvInfo) => {
           chunk++
@@ -55,7 +77,7 @@ var socketMagic = (urlString, cb) => {
           var res = dec.decode(recvInfo.data)
 
           if (chunk === 1) {
-            var obj = parseHeaders(res)
+            obj = parseHeaders(res)
             all = all.concat(obj.body)
             len += enc.encode(obj.body).byteLength
             totalLen = parseInt(obj.headers["Content-Length"])
@@ -67,7 +89,7 @@ var socketMagic = (urlString, cb) => {
           console.log(`Chunk ${chunk}, Len: ${len}, TotalLen: ${totalLen}`);
 
           if(len >= totalLen) {
-            cb(all);
+            cb(all, obj);
             chrome.sockets.tcp.disconnect(socketId);
           }
         })
@@ -80,22 +102,37 @@ var socketMagic = (urlString, cb) => {
   })
 }
 
-var parseHeaders = (res) => {
-  var s = "\r\n\r\n"
-  var ind = res.indexOf(s)
-  var headers = res.slice(0,ind)
-  var body = res.slice(ind + s.length)
-  var obj = {headers: {}}
+var domMagic = (baseURL, body, mimeType) => {
+  var parser = new DOMParser()
+  doc = parser.parseFromString(body, mimeType)
+  // doc.baseURI = url
 
-  headers.split("\r\n").forEach((line) => {
-    var ind = line.indexOf(": ")
-    var key = line.slice(0, ind)
-    var val = line.slice(ind + 2)
-    obj.headers[key] = val
+  console.log(doc)
+
+  // fully qualify all the links. i.e. resolve relative paths etc.
+  doc.querySelectorAll('[src], [href]').forEach((elt) => {
+    if (elt.attributes.src) {
+      var tempURL = new URL(elt.attributes.src.value, baseURL)
+      elt.attributes.src.value = tempURL.href
+    }
+    if (elt.attributes.href) {
+      var tempURL = new URL(elt.attributes.href.value, baseURL)
+      elt.attributes.href.value = tempURL.href
+    }
   })
-  obj.body = body
-  console.log(obj)
 
-  return obj
+  // a sourcemap is a dictionary with fully qualified URLs as keys, and the downloaded content as values
+  var sourcemap = {}
+
+  // gotta load images and stuff, i.e. socket shit
+  doc.querySelectorAll('img[src], script[src], link[href]').forEach((elt) => {
+
+
+  })
+  console.log(doc);
+
+
+  // style files from different resources
+
+  // scripts from different resources
 }
-
