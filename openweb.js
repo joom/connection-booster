@@ -1,29 +1,5 @@
-// once page loads
-document.addEventListener('DOMContentLoaded', function() {
-  // identify the submit
-  var button = document.getElementById("clickme");
-  var webview = document.querySelector('webview');
-  webview.src = `data:text/html,`
-
-  if (button) {
-    button.addEventListener("click", function() {
-      var url = document.getElementById("website").value.trim();
-      // webview.src = url
-      // webview.stop()
-      // console.log(webview.contentWindow)
-      socketMagic(url, (body, obj) => {
-        webview.src = `data:${obj.mimeType},${body}`
-        domMagic(url, body, obj.mimeType)
-
-        // webview.executeScript({code: `document.documentElement.innerHTML`}, function(results) {
-        //   // results[0] would have the webview's innerHTML.
-        //   console.log(results);
-        // });
-      })
-    })
-  }
-})
-
+// Takes the first chunk of an HTTP response,
+// parses the headers and the body to an object.
 var parseHeaders = (res) => {
   var s = "\r\n\r\n"
   var ind = res.indexOf(s)
@@ -43,9 +19,10 @@ var parseHeaders = (res) => {
   return obj
 }
 
-
+// Takes a URL string, opens a TCP connection, sends an HTTP request, receives
+// an HTTP response and parses it. The callback function takes the response
+// body as a string, and the parsed object from the initial chunk.
 var socketMagic = (urlString, cb) => {
-  // make sure url starts with http://
   var url = new URL(urlString)
   if (url.protocol !== "http:") {
     throw new Error("URL should start with http://")
@@ -68,10 +45,7 @@ var socketMagic = (urlString, cb) => {
 
         chrome.sockets.tcp.onReceive.addListener((recvInfo) => {
           chunk++
-
-          if (recvInfo.socketId != socketId) {
-            return
-          }
+          if (recvInfo.socketId != socketId) { return }
 
           // recvInfo.data is an arrayBuffer.
           var res = dec.decode(recvInfo.data)
@@ -102,12 +76,12 @@ var socketMagic = (urlString, cb) => {
   })
 }
 
-var domMagic = (baseURL, body, mimeType) => {
+// Takes an absolute base URL (the page that the browser is looking at),
+// the response body as a string, the MIME type,
+// and a callback that takes a document.
+var domMagic = (baseURL, body, mimeType, cb) => {
   var parser = new DOMParser()
   doc = parser.parseFromString(body, mimeType)
-  // doc.baseURI = url
-
-  console.log(doc)
 
   // fully qualify all the links. i.e. resolve relative paths etc.
   doc.querySelectorAll('[src], [href]').forEach((elt) => {
@@ -129,10 +103,49 @@ var domMagic = (baseURL, body, mimeType) => {
 
 
   })
-  console.log(doc);
 
 
   // style files from different resources
 
   // scripts from different resources
+
+  cb(doc)
 }
+
+// Takes a URL, does all the connection stuff and updates the WebView,
+// then calls the callback which takes a document.
+var urlMagic = (url, cb) => {
+  socketMagic(url, (body, obj) => {
+    var webview = document.querySelector('webview');
+    webview.src = `data:${obj.mimeType},${body}`
+    domMagic(url, body, obj.mimeType, (doc) => {
+      // doc is the corrected document
+      cb(doc)
+    })
+
+    // webview.executeScript({code: `document.documentElement.innerHTML`}, function(results) {
+    //   // results[0] would have the webview's innerHTML.
+    //   console.log(results);
+    // });
+  })
+}
+
+// Once page loads
+document.addEventListener('DOMContentLoaded', function() {
+  var button = document.getElementById("clickme");
+  var webview = document.querySelector('webview');
+  webview.src = `data:text/html,` // empty page
+
+  if (button) {
+    button.addEventListener("click", function() {
+      var url = document.getElementById("website").value.trim();
+      urlMagic(url, (doc) => {
+
+      })
+      // webview.src = url
+      // webview.stop()
+      // console.log(webview.contentWindow)
+
+    })
+  }
+})
