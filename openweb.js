@@ -60,16 +60,16 @@ var socketMagic = (urlString, cb) => {
             len += recvInfo.data.byteLength
           }
 
-          console.log(`Chunk ${chunk}, Len: ${len}, TotalLen: ${totalLen}`);
+          console.log(`Chunk ${chunk}, Len: ${len}, TotalLen: ${totalLen}`)
 
           if(len >= totalLen) {
-            cb(all, obj);
-            chrome.sockets.tcp.disconnect(socketId);
+            cb(all, obj)
+            chrome.sockets.tcp.disconnect(socketId)
           }
         })
 
         chrome.sockets.tcp.onReceiveError.addListener((errInfo) => {
-          chrome.sockets.tcp.disconnect(socketId);
+          chrome.sockets.tcp.disconnect(socketId)
         })
       })
     })
@@ -84,7 +84,7 @@ var domMagic = (baseURL, body, mimeType, cb) => {
   doc = parser.parseFromString(body, mimeType)
 
   // fully qualify all the links. i.e. resolve relative paths etc.
-  doc.querySelectorAll('[src], [href]').forEach((elt) => {
+  doc.querySelectorAll("[src], [href]").forEach((elt) => {
     if (elt.attributes.src) {
       var tempURL = new URL(elt.attributes.src.value, baseURL)
       elt.attributes.src.value = tempURL.href
@@ -99,7 +99,7 @@ var domMagic = (baseURL, body, mimeType, cb) => {
   var sourcemap = {}
 
   // gotta load images and stuff, i.e. socket shit
-  doc.querySelectorAll('img[src], script[src], link[href]').forEach((elt) => {
+  doc.querySelectorAll("img[src], script[src], link[href]").forEach((elt) => {
 
 
   })
@@ -109,36 +109,36 @@ var domMagic = (baseURL, body, mimeType, cb) => {
 
   // scripts from different resources
 
-  cb(doc)
+  cb(doc, sourcemap)
 }
 
 // Takes a URL, does all the connection stuff and updates the WebView,
 // then calls the callback which takes a document.
 var urlMagic = (url, cb) => {
   socketMagic(url, (body, obj) => {
-    var webview = document.querySelector('webview');
+    var webview = document.querySelector("webview")
     webview.src = `data:${obj.mimeType},${body}`
-    domMagic(url, body, obj.mimeType, (doc) => {
+    domMagic(url, body, obj.mimeType, (doc, sourcemap) => {
       // doc is the corrected document
       cb(doc)
     })
 
     // webview.executeScript({code: `document.documentElement.innerHTML`}, function(results) {
     //   // results[0] would have the webview's innerHTML.
-    //   console.log(results);
-    // });
+    //   console.log(results)
+    // })
   })
 }
 
 // Once page loads
-document.addEventListener('DOMContentLoaded', function() {
-  var button = document.getElementById("clickme");
-  var webview = document.querySelector('webview');
+document.addEventListener("DOMContentLoaded", function() {
+  var button = document.getElementById("clickme")
+  var webview = document.querySelector("webview")
   webview.src = `data:text/html,` // empty page
 
   if (button) {
     button.addEventListener("click", function() {
-      var url = document.getElementById("website").value.trim();
+      var url = document.getElementById("website").value.trim()
       urlMagic(url, (doc) => {
 
       })
