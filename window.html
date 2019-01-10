@@ -22,13 +22,14 @@
       <form>
         <label for="website">Go to website:</label>
         <input type="text" id="website" name="website" required
-               size="50" value="http://cattheory.com">
-        <input type="submit" id="clickme" value="Go!">
+               size="50" value="http://cattheory.com/test/">
+        <input type="submit" id="go" value="Go!">
+        <input type="button" id="clear" value="Clear cache">
       </form>
     </div>
 
     <webview style="width:100%; height:100%"></webview>
+    <script src="parallel.js"></script>
     <script src="openweb.js"></script>
-    <!-- <script src="sockets.js"></script> -->
   </body>
 </html>
