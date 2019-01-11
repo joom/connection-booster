@@ -1,13 +1,21 @@
+var enc = new TextEncoder()
+var dec = new TextDecoder()
+
 // Takes the first chunk of an HTTP response,
 // parses the headers and the body to an object.
 var parseHeaders = (res) => {
+  var obj = {headers: {}}
   var s = "\r\n\r\n"
   var ind = res.indexOf(s)
   var headers = res.slice(0,ind)
+  obj.headerLength = enc.encode(res.slice(0,ind + s.length)).byteLength
   var body = res.slice(ind + s.length)
-  var obj = {headers: {}}
 
   headers.split("\r\n").forEach((line) => {
+    if (line.indexOf("HTTP/1.1") === 0) {
+      obj.headers.status = line
+      return
+    }
     var ind = line.indexOf(": ")
     var key = line.slice(0, ind)
     var val = line.slice(ind + 2)
@@ -15,12 +23,14 @@ var parseHeaders = (res) => {
   })
 
   obj.body = body
-  obj.mimeType = obj.headers["Content-Type"].slice(0, obj.headers["Content-Type"].indexOf("; "))
+  var ind = obj.headers["Content-Type"].indexOf("; ")
+  if (ind !== -1) {
+    obj.mimeType = obj.headers["Content-Type"].slice(0, obj.headers["Content-Type"].indexOf("; "))
+  } else {
+    obj.mimeType = obj.headers["Content-Type"]
+  }
   return obj
 }
-
-var enc = new TextEncoder()
-var dec = new TextDecoder()
 
 // Takes a URL string, opens a TCP connection, sends an HTTP request, receives
 // an HTTP response and parses it. The callback function takes the response
@@ -46,6 +56,7 @@ var socketMagic = (urlString, cb) => {
 
         chrome.sockets.tcp.onReceive.addListener((recvInfo) => {
           if (recvInfo.socketId != socketId) { return }
+          console.log(`RECEIVED for ${url.pathname}`)
           console.log(recvInfo)
           chunk++
 
@@ -55,19 +66,21 @@ var socketMagic = (urlString, cb) => {
           if (chunk === 1) {
             obj = parseHeaders(res)
             all = all.concat(obj.body)
-            len += enc.encode(obj.body).byteLength
+            // len += enc.encode(obj.body).byteLength
+            len += recvInfo.data.byteLength - obj.headerLength
             totalLen = parseInt(obj.headers["Content-Length"])
           } else {
             all = all.concat(res)
             len += recvInfo.data.byteLength
           }
 
-          console.log(`Chunk ${chunk}, Len: ${len}, TotalLen: ${totalLen}`)
+          console.log(`Chonk ${chunk}, Len: ${len}, TotalLen: ${totalLen}, File: ${url.pathname}`)
 
           if(len >= totalLen) {
             console.log(obj)
-            cb(all, obj)
+            console.log("-----------------")
             chrome.sockets.tcp.disconnect(socketId)
+            cb(all, obj)
           }
         })
 
@@ -107,6 +120,7 @@ var domMagic = (baseURL, body, mimeType, cb) => {
     var addr = ``
     if (elt.attributes.src) { addr = elt.attributes.src.value }
     if (elt.attributes.href) { addr = elt.attributes.href.value }
+    console.log(`SOCKET FOR ${addr}`);
     if (sourcemap[addr]) { return } // don't download twice
 
     parallelFns.push(function (callback) {
@@ -119,7 +133,10 @@ var domMagic = (baseURL, body, mimeType, cb) => {
 
   runParallel(parallelFns, function (err, results) {
     // now all resources have been downloaded
+    console.log("~~~~~~~~~~~~~~~~~~")
+    console.log("SOURCEMAP")
     console.log(sourcemap);
+    console.log("~~~~~~~~~~~~~~~~~~")
     cb(doc, sourcemap)
   })
 }
