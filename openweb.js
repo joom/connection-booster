@@ -1,5 +1,7 @@
 var enc = new TextEncoder()
 var dec = new TextDecoder()
+enc.encoding = "utf-8"
+dec.encoding = "utf-8"
 
 // Takes the first chunk of an HTTP response,
 // parses the headers and the body to an object.
@@ -25,7 +27,10 @@ var parseHeaders = (res) => {
   obj.body = body
   var ind = obj.headers["Content-Type"].indexOf("; ")
   if (ind !== -1) {
-    obj.mimeType = obj.headers["Content-Type"].slice(0, obj.headers["Content-Type"].indexOf("; "))
+    obj.encoding = obj.headers["Content-Type"].slice(ind + 2)
+    obj.encoding = obj.encoding.slice(obj.encoding.indexOf("charset=") + 8)
+    console.log(`ENCODING FOUND: ${obj.encoding}`);
+    obj.mimeType = obj.headers["Content-Type"].slice(0, ind)
   } else {
     obj.mimeType = obj.headers["Content-Type"]
   }
@@ -41,7 +46,7 @@ var socketMagic = (urlString, cb) => {
     return
     // throw new Error("URL should start with http://")
   }
-  var httpReqHeader = `GET ${url.pathname} HTTP/1.1\r\nHost: ${url.host}\r\n\r\n`
+  var httpReqHeader = `GET ${url.pathname} HTTP/1.1\r\nHost: ${url.host}\r\nAccept-Encoding: UTF-8\r\nAccept-Charset: UTF-8\r\n\r\n`
   var httpReqHeaderEnc = enc.encode(httpReqHeader)
 
   chrome.sockets.tcp.create({}, (createInfo) => {
@@ -103,11 +108,11 @@ var domMagic = (baseURL, body, mimeType, cb) => {
   doc.querySelectorAll("[src], [href]").forEach((elt) => {
     if (elt.attributes.src) {
       var tempURL = new URL(elt.attributes.src.value, baseURL)
-      elt.attributes.src.value = tempURL.href
+      elt.setAttribute("src", tempURL.href)
     }
     if (elt.attributes.href) {
       var tempURL = new URL(elt.attributes.href.value, baseURL)
-      elt.attributes.href.value = tempURL.href
+      elt.setAttribute("href", tempURL.href)
     }
   })
 
@@ -148,14 +153,37 @@ var urlMagic = (url, cb) => {
     var webview = document.querySelector("webview")
     webview.src = `data:${obj.mimeType},${body}`
     domMagic(url, body, obj.mimeType, (doc, sourcemap) => {
+      console.log("DOMMAGIC CALLBACK:")
       // doc is the corrected document
+
+      doc.querySelectorAll("img[src], script[src], link[href]").forEach(function (elt) {
+        if (elt.attributes.src && sourcemap[elt.attributes.src.value]) {
+          elt.setAttribute("src", sourcemap[elt.attributes.src.value]);
+          console.log("src changed")
+        }
+        if (elt.attributes.href && sourcemap[elt.attributes.href.value]) {
+          elt.setAttribute("href", sourcemap[elt.attributes.href.value]);
+          console.log("href changed")
+        }
+      })
+
+      console.log(doc);
+      var dochtml = new XMLSerializer().serializeToString(doc)
+      console.log(dochtml.slice(0,30))
+      webview.src = `data:${obj.mimeType},${dochtml}`
+
+      // WRITE ABOUT WHY WE COULDN'T DO THIS
+      // var code = `(function(){var sourcemap = ${str};
+      //             })()`
+      // webview.executeScript({code: code}, function(results) {
+      //   // results[0] would have the webview's innerHTML.
+      //   console.log("RAN THE CODE");
+      //   console.log(results)
+      // })
+
       cb(doc)
     })
 
-    // webview.executeScript({code: `document.documentElement.innerHTML`}, function(results) {
-    //   // results[0] would have the webview's innerHTML.
-    //   console.log(results)
-    // })
   })
 }
 
