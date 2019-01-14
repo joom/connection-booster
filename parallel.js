@@ -1,4 +1,4 @@
-// https://github.com/feross/run-parallel
+// https://github.com/feross/run-parallel-limit
 /*
 The MIT License (MIT)
 
@@ -24,7 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /* Example:
 
-parallel([
+var tasks = [
   function (callback) {
     setTimeout(function () {
       callback(null, 'one')
@@ -34,26 +34,30 @@ parallel([
     setTimeout(function () {
       callback(null, 'two')
     }, 100)
-  }
-],
-// optional callback
-function (err, results) {
-  // the results array will equal ['one','two'] even though
+  },
+  ... hundreds more tasks ...
+]
+
+parallelLimit(tasks, 5, function (err, results) {
+  // optional callback
+  // the results array will equal ['one', 'two', ...] even though
   // the second function had a shorter timeout.
 })
 
 */
-function runParallel (tasks, cb) {
-  var results, pending, keys
+
+function runParallelLimit (tasks, limit, cb) {
+  if (typeof limit !== 'number') throw new Error('second argument must be a Number')
+  var results, len, pending, keys, isErrored
   var isSync = true
 
   if (Array.isArray(tasks)) {
     results = []
-    pending = tasks.length
+    pending = len = tasks.length
   } else {
     keys = Object.keys(tasks)
     results = {}
-    pending = keys.length
+    pending = len = keys.length
   }
 
   function done (err) {
@@ -67,23 +71,38 @@ function runParallel (tasks, cb) {
 
   function each (i, err, result) {
     results[i] = result
+    if (err) isErrored = true
     if (--pending === 0 || err) {
       done(err)
+    } else if (!isErrored && next < len) {
+      var key
+      if (keys) {
+        key = keys[next]
+        next += 1
+        tasks[key](function (err, result) { each(key, err, result) })
+      } else {
+        key = next
+        next += 1
+        tasks[key](function (err, result) { each(key, err, result) })
+      }
     }
   }
 
+  var next = limit
   if (!pending) {
     // empty
     done(null)
   } else if (keys) {
     // object
-    keys.forEach(function (key) {
+    keys.some(function (key, i) {
       tasks[key](function (err, result) { each(key, err, result) })
+      if (i === limit - 1) return true // early return
     })
   } else {
     // array
-    tasks.forEach(function (task, i) {
+    tasks.some(function (task, i) {
       task(function (err, result) { each(i, err, result) })
+      if (i === limit - 1) return true // early return
     })
   }
 

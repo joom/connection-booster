@@ -2,6 +2,7 @@ var enc = new TextEncoder("utf-8")
 var dec = new TextDecoder("utf-8")
 
 // Takes the first chunk of an HTTP response,
+// or whatever it is given that has to end with \r\n\r\n,
 // parses the headers and the body to an object.
 const parseHeaders = (res) => {
   var obj = {headers: {}}
@@ -34,6 +35,8 @@ const parseHeaders = (res) => {
   return obj
 }
 
+var activeSockets = 0
+
 // Takes a URL string, opens a TCP connection, sends an HTTP request, receives
 // an HTTP response and parses it. The callback function takes the response
 // body as a string, and the parsed object from the initial chunk.
@@ -47,8 +50,14 @@ const socketMagic = (urlString, cb) => {
   var httpReqHeaderEnc = enc.encode(httpReqHeader)
 
   chrome.sockets.tcp.create({}, (createInfo) => {
+    var sockets = {}
+
+    console.log(`Created socket for ${urlString}, active ${activeSockets}`);
+    activeSockets++
     var socketId = createInfo.socketId
+    sockets[urlString] = socketId
     chrome.sockets.tcp.connect(socketId, url.host, 80, (result) => {
+      console.log(`Connected to socket for ${urlString}, active ${activeSockets}`);
       chrome.sockets.tcp.send(socketId, httpReqHeaderEnc, (sendInfo) => {
         var chunk = 0
         var all = []
@@ -93,13 +102,15 @@ const socketMagic = (urlString, cb) => {
             len += recvInfo.data.byteLength
           }
 
-          console.log(`Chonk ${chunk}, Len: ${len}, TotalLen: ${totalLen}, File: ${url.pathname}`)
+          console.log(`Chunk #${chunk}, ${len}/${totalLen}, loaded ${((len/totalLen)*100).toFixed(1)}% of file: ${url.pathname}, active ${activeSockets}`)
 
           if(len >= totalLen) {
             // console.log(obj)
             // console.log("-----------------")
-            console.log(`Finished loading ${url.pathname}`)
             chrome.sockets.tcp.disconnect(socketId)
+            activeSockets--
+            delete sockets[socketId]
+            console.log(`Finished loading ${url.pathname}, active ${activeSockets}`)
             var blob = new Blob(all, {type: obj.mimeType})
             cb(blob, obj)
           }
@@ -107,6 +118,10 @@ const socketMagic = (urlString, cb) => {
 
         chrome.sockets.tcp.onReceiveError.addListener((errInfo) => {
           chrome.sockets.tcp.disconnect(socketId)
+          if (sockets[socketId]) {
+            activeSockets--
+            delete sockets[socketId]
+          }
         })
       })
     })
@@ -131,17 +146,20 @@ const domMagic = (baseURL, body, cb) => {
   var parser = new DOMParser()
   doc = parser.parseFromString(body, "text/html")
 
-  var script = doc.createElement("script")
-  script.appendChild(doc.createTextNode(
-  // doesn't work yet
-  `document.addEventListener("click", function(event) {
-      event.preventDefault();
-      console.log(event.target);
-   });
-  `))
-  doc.body.appendChild(script)
-
-
+  // Example code to stop clicks in the page, so that we can overload them.
+  // It's not super clear how we can send a message from the WebView
+  // to the outer app.
+  /*
+    var script = doc.createElement("script")
+    script.appendChild(doc.createTextNode(
+    // doesn't work yet
+    `document.addEventListener("click", function(event) {
+        event.preventDefault();
+        console.log(event.target);
+    });
+    `))
+    doc.body.appendChild(script)
+  */
 
   // fully qualify all the links. i.e. resolve relative paths etc.
   doc.querySelectorAll("[src], [href]").forEach((elt) => {
@@ -164,8 +182,9 @@ const domMagic = (baseURL, body, cb) => {
     var addr = ``
     if (elt.attributes.src) { addr = elt.attributes.src.value }
     if (elt.attributes.href) { addr = elt.attributes.href.value }
-    console.log(`SOCKET FOR ${addr}`);
     if (sourcemap[addr]) { return } // don't download twice
+
+    var activeDownloads = 0
 
     parallelFns.push(function (callback) {
       socketMagic(addr, (blob, obj) => {
@@ -177,9 +196,12 @@ const domMagic = (baseURL, body, cb) => {
     })
   })
 
-  runParallel(parallelFns, function (err, results) {
+  var limit = parseInt(document.querySelector("#parallel").value)
+  console.log(`Starting to download ${parallelFns.length} files in parallel, with max ${limit} at a time`);
+
+  runParallelLimit(parallelFns, limit, function (err, results) {
     // now all resources have been downloaded
-    console.log("Sourcemap finished")
+    console.log("All downloads finished, sourcemap filled")
     // console.log(sourcemap);
     cb(doc, sourcemap)
   })
@@ -230,6 +252,16 @@ const urlMagic = (url, cb) => {
   })
 }
 
+const closeAllSockets = () => {
+  chrome.sockets.tcp.getSockets((sockets) => {
+    sockets.forEach((socketInfo) => {
+      chrome.sockets.tcp.disconnect(socketInfo.socketId, () => {})
+      chrome.sockets.tcp.close(socketInfo.socketId, () => {})
+    })
+  })
+  activeSockets = 0
+}
+
 // Once page loads
 document.addEventListener("DOMContentLoaded", (ev) => {
   var go = document.getElementById("go")
@@ -238,9 +270,13 @@ document.addEventListener("DOMContentLoaded", (ev) => {
   webview.src = `data:text/html,` // empty page
 
   go.addEventListener("click", (ev) => {
+    var t1 = performance.now()
+    closeAllSockets()
     var url = document.getElementById("website").value.trim()
     urlMagic(url, (doc) => {
-      console.log(`Page loaded: ${url}`);
+      var t2 = performance.now()
+      var diff = t2 - t1
+      console.log(`Page loaded in ${diff} ms: ${url}`);
     })
   })
 
