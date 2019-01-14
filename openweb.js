@@ -282,4 +282,7 @@ document.addEventListener('DOMContentLoaded', (ev) => {
       console.log(`Page loaded in ${diff} ms: ${url}`)
     })
   })
+  document.getElementById('reload').addEventListener('click', (ev) => {
+    chrome.runtime.reload()
+  })
 })
