@@ -64,7 +64,7 @@ const socketMagic = (urlString, cb) => {
         var totalLen = 0
         var obj = {}
 
-        chrome.sockets.tcp.onReceive.addListener((recvInfo) => {
+        var listener = (recvInfo) => {
           if (recvInfo.socketId !== socketId) { return }
           // console.log(`RECEIVED for ${url.pathname}`)
           // console.log(recvInfo)
@@ -104,7 +104,11 @@ const socketMagic = (urlString, cb) => {
           // console.log(`Chunk #${chunk}, ${len}/${totalLen}, loaded ${((len / totalLen) * 100).toFixed(1)}% of file: ${url.pathname}, active ${activeSockets}`)
 
           if (len >= totalLen) {
-            chrome.sockets.tcp.disconnect(socketId)
+            chrome.sockets.tcp.onReceive.removeListener(listener)
+            try {
+              chrome.sockets.tcp.disconnect(socketId)
+            } catch (e) {}
+
             if (sockets[urlString]) {
               activeSockets--
               delete sockets[urlString]
@@ -113,9 +117,13 @@ const socketMagic = (urlString, cb) => {
             var blob = new Blob(all, { type: obj.mimeType })
             cb(blob, obj)
           }
-        })
+        }
 
-        chrome.sockets.tcp.onReceiveError.addListener((errInfo) => {
+        chrome.sockets.tcp.onReceive.addListener(listener)
+
+        var listenerError = (errInfo) => {
+          chrome.sockets.tcp.onReceive.removeListener(listener)
+          chrome.sockets.tcp.onReceive.removeListener(listenerError)
           try {
             // try closing just in case, it's fine if the socket is already closed
             chrome.sockets.tcp.disconnect(socketId)
@@ -124,7 +132,8 @@ const socketMagic = (urlString, cb) => {
             activeSockets--
             delete sockets[urlString]
           }
-        })
+        }
+        chrome.sockets.tcp.onReceiveError.addListener(listenerError)
       })
     })
   })
