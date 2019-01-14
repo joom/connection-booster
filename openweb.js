@@ -75,7 +75,7 @@ const socketMagic = (urlString, cb) => {
             var arr = new Uint8Array(recvInfo.data)
             var arrLenLimit = arr.length - 3
             var i = 0
-            while (i >= 0 < arrLenLimit) {
+            while (0 <= i < arrLenLimit) {
               // console.log(`PARSE LOOP at ${i}`)
               // look for the sequence: 13 10 13 10, which corresponds to \r\n\r\n,
               // which signals the end of a HTTP response header
