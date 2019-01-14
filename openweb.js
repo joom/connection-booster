@@ -1,7 +1,5 @@
-var enc = new TextEncoder()
-var dec = new TextDecoder()
-enc.encoding = "utf-8"
-dec.encoding = "utf-8"
+var enc = new TextEncoder("utf-8")
+var dec = new TextDecoder("utf-8")
 
 // Takes the first chunk of an HTTP response,
 // parses the headers and the body to an object.
@@ -54,28 +52,45 @@ const socketMagic = (urlString, cb) => {
     chrome.sockets.tcp.connect(socketId, url.host, 80, (result) => {
       chrome.sockets.tcp.send(socketId, httpReqHeaderEnc, (sendInfo) => {
         var chunk = 0
-        var all = ``
+        var all = []
         var len = 0
         var totalLen = 0
         var obj = {}
 
         chrome.sockets.tcp.onReceive.addListener((recvInfo) => {
           if (recvInfo.socketId != socketId) { return }
-          console.log(`RECEIVED for ${url.pathname}`)
-          console.log(recvInfo)
+          // console.log(`RECEIVED for ${url.pathname}`)
+          // console.log(recvInfo)
           chunk++
 
           // recvInfo.data is an arrayBuffer.
-          var res = dec.decode(recvInfo.data)
-
           if (chunk === 1) {
-            obj = parseHeaders(res)
-            all = all.concat(obj.body)
-            // len += enc.encode(obj.body).byteLength
+            var arr = new Uint8Array(recvInfo.data)
+            var arrLen = arr.length
+            var i = 0
+            while(0 <= i < (arr.length - 3)) {
+              // console.log(`PARSE LOOP at ${i}`);
+              // look for the sequence: 13 10 13 10, which corresponds to \r\n\r\n,
+              // which signals the end of a HTTP response header
+              i = arr.indexOf(13, i)
+              // console.log(`sequence: ${arr[i]} ${arr[i+1]} ${arr[i+2]} ${arr[i+3]}`);
+
+              // we need == instead of === because the array consists of 8-bit integers, not numbers
+              if (arr[i + 1] == 10 &&  arr[i + 2] == 13 && arr[i + 3] == 10) {
+                break // then i is what we are looking for!
+              } else {
+                i++ // we gotta increase it so that this \r is not included in the next indexOf
+              }
+            }
+            var nonHeaderData = arr.slice(i + 4) // just get the part AFTER the \r\n\r\n
+            var headerData = arr.slice(0, i + 4) // just get the part before the body, including \r\n\r\n
+            all.push(nonHeaderData.buffer)
+
+            obj = parseHeaders(dec.decode(headerData))
             len += recvInfo.data.byteLength - obj.headerLength
             totalLen = parseInt(obj.headers["Content-Length"])
           } else {
-            all = all.concat(res)
+            all.push(recvInfo.data)
             len += recvInfo.data.byteLength
           }
 
@@ -85,7 +100,8 @@ const socketMagic = (urlString, cb) => {
             console.log(obj)
             console.log("-----------------")
             chrome.sockets.tcp.disconnect(socketId)
-            cb(all, obj)
+            var blob = new Blob(all, {type: obj.mimeType})
+            cb(blob, obj)
           }
         })
 
@@ -96,18 +112,24 @@ const socketMagic = (urlString, cb) => {
     })
   })
 }
-const getBase64 = (file, cb) => {
+
+const blobToBase64 = (blob, cb) => {
   const reader = new FileReader();
   reader.addEventListener("load", () => cb(reader.result));
-  reader.readAsDataURL(file);
+  reader.readAsDataURL(blob);
+}
+const blobToText = (blob, cb) => {
+  const reader = new FileReader();
+  reader.addEventListener("load", () => cb(reader.result));
+  reader.readAsText(blob);
 }
 
 // Takes an absolute base URL (the page that the browser is looking at),
 // the response body as a string, the MIME type,
 // and a callback that takes a document.
-const domMagic = (baseURL, body, mimeType, cb) => {
+const domMagic = (baseURL, body, cb) => {
   var parser = new DOMParser()
-  var doc = parser.parseFromString(body, mimeType)
+  var doc = parser.parseFromString(body, "text/html")
 
   // fully qualify all the links. i.e. resolve relative paths etc.
   doc.querySelectorAll("[src], [href]").forEach((elt) => {
@@ -134,14 +156,11 @@ const domMagic = (baseURL, body, mimeType, cb) => {
     if (sourcemap[addr]) { return } // don't download twice
 
     parallelFns.push(function (callback) {
-      socketMagic(addr, (body, obj) => {
-        getBase64(new Blob([body], {type : obj.mimeType}), (b) => {
+      socketMagic(addr, (blob, obj) => {
+        blobToBase64(blob, (b) => {
           sourcemap[addr] = b
           callback(null, {})
         })
-
-        // sourcemap[addr] = `data:${obj.mimeType},${body}`
-        // callback(null, {})
       })
     })
   })
@@ -159,39 +178,43 @@ const domMagic = (baseURL, body, mimeType, cb) => {
 // Takes a URL, does all the connection stuff and updates the WebView,
 // then calls the callback which takes a document.
 const urlMagic = (url, cb) => {
-  socketMagic(url, (body, obj) => {
+  socketMagic(url, (blob, obj) => {
     var webview = document.querySelector("webview")
-    webview.src = `data:${obj.mimeType},${body}`
-    domMagic(url, body, obj.mimeType, (doc, sourcemap) => {
-      console.log("DOMMAGIC CALLBACK:")
-      // doc is the corrected document
+    blobToBase64(blob, (b64) => { webview.src = b64 })
 
-      doc.querySelectorAll("img[src], script[src], link[href]").forEach(function (elt) {
-        if (elt.attributes.src && sourcemap[elt.attributes.src.value]) {
-          elt.setAttribute("src", sourcemap[elt.attributes.src.value]);
-          console.log("src changed")
-        }
-        if (elt.attributes.href && sourcemap[elt.attributes.href.value]) {
-          elt.setAttribute("href", sourcemap[elt.attributes.href.value]);
-          console.log("href changed")
-        }
+    if (obj.mimeType !== "text/html") { return }
+    blobToText(blob, (body) => {
+      domMagic(url, body, (doc, sourcemap) => {
+        console.log("DOMMAGIC CALLBACK:")
+        // doc is the corrected document
+
+        doc.querySelectorAll("img[src], script[src], link[href]").forEach(function (elt) {
+          if (elt.attributes.src && sourcemap[elt.attributes.src.value]) {
+            elt.setAttribute("src", sourcemap[elt.attributes.src.value]);
+            console.log("src changed")
+          }
+          if (elt.attributes.href && sourcemap[elt.attributes.href.value]) {
+            elt.setAttribute("href", sourcemap[elt.attributes.href.value]);
+            console.log("href changed")
+          }
+        })
+
+        console.log(doc);
+        var dochtml = new XMLSerializer().serializeToString(doc)
+        console.log(dochtml.slice(0,30))
+        webview.src = `data:${obj.mimeType},${dochtml}`
+
+        // WRITE ABOUT WHY WE COULDN'T DO THIS
+        // var code = `(function(){var sourcemap = ${str};
+        //             })()`
+        // webview.executeScript({code: code}, function(results) {
+        //   // results[0] would have the webview's innerHTML.
+        //   console.log("RAN THE CODE");
+        //   console.log(results)
+        // })
+
+        cb(doc)
       })
-
-      console.log(doc);
-      var dochtml = new XMLSerializer().serializeToString(doc)
-      console.log(dochtml.slice(0,30))
-      webview.src = `data:${obj.mimeType},${dochtml}`
-
-      // WRITE ABOUT WHY WE COULDN'T DO THIS
-      // var code = `(function(){var sourcemap = ${str};
-      //             })()`
-      // webview.executeScript({code: code}, function(results) {
-      //   // results[0] would have the webview's innerHTML.
-      //   console.log("RAN THE CODE");
-      //   console.log(results)
-      // })
-
-      cb(doc)
     })
 
   })
