@@ -27,7 +27,6 @@ const parseHeaders = (res) => {
   if (ind !== -1) {
     obj.encoding = obj.headers["Content-Type"].slice(ind + 2)
     obj.encoding = obj.encoding.slice(obj.encoding.indexOf("charset=") + 8)
-    console.log(`ENCODING FOUND: ${obj.encoding}`);
     obj.mimeType = obj.headers["Content-Type"].slice(0, ind)
   } else {
     obj.mimeType = obj.headers["Content-Type"]
@@ -97,8 +96,9 @@ const socketMagic = (urlString, cb) => {
           console.log(`Chonk ${chunk}, Len: ${len}, TotalLen: ${totalLen}, File: ${url.pathname}`)
 
           if(len >= totalLen) {
-            console.log(obj)
-            console.log("-----------------")
+            // console.log(obj)
+            // console.log("-----------------")
+            console.log(`Finished loading ${url.pathname}`)
             chrome.sockets.tcp.disconnect(socketId)
             var blob = new Blob(all, {type: obj.mimeType})
             cb(blob, obj)
@@ -129,7 +129,19 @@ const blobToText = (blob, cb) => {
 // and a callback that takes a document.
 const domMagic = (baseURL, body, cb) => {
   var parser = new DOMParser()
-  var doc = parser.parseFromString(body, "text/html")
+  doc = parser.parseFromString(body, "text/html")
+
+  var script = doc.createElement("script")
+  script.appendChild(doc.createTextNode(
+  // doesn't work yet
+  `document.addEventListener("click", function(event) {
+      event.preventDefault();
+      console.log(event.target);
+   });
+  `))
+  doc.body.appendChild(script)
+
+
 
   // fully qualify all the links. i.e. resolve relative paths etc.
   doc.querySelectorAll("[src], [href]").forEach((elt) => {
@@ -167,10 +179,8 @@ const domMagic = (baseURL, body, cb) => {
 
   runParallel(parallelFns, function (err, results) {
     // now all resources have been downloaded
-    console.log("~~~~~~~~~~~~~~~~~~")
-    console.log("SOURCEMAP")
-    console.log(sourcemap);
-    console.log("~~~~~~~~~~~~~~~~~~")
+    console.log("Sourcemap finished")
+    // console.log(sourcemap);
     cb(doc, sourcemap)
   })
 }
@@ -185,23 +195,23 @@ const urlMagic = (url, cb) => {
     if (obj.mimeType !== "text/html") { return }
     blobToText(blob, (body) => {
       domMagic(url, body, (doc, sourcemap) => {
-        console.log("DOMMAGIC CALLBACK:")
+        // console.log("DOMMAGIC CALLBACK:")
         // doc is the corrected document
 
         doc.querySelectorAll("img[src], script[src], link[href]").forEach(function (elt) {
           if (elt.attributes.src && sourcemap[elt.attributes.src.value]) {
             elt.setAttribute("src", sourcemap[elt.attributes.src.value]);
-            console.log("src changed")
+            // console.log("src changed")
           }
           if (elt.attributes.href && sourcemap[elt.attributes.href.value]) {
             elt.setAttribute("href", sourcemap[elt.attributes.href.value]);
-            console.log("href changed")
+            // console.log("href changed")
           }
         })
 
-        console.log(doc);
+        // console.log(doc);
         var dochtml = new XMLSerializer().serializeToString(doc)
-        console.log(dochtml.slice(0,30))
+        // console.log(dochtml.slice(0,30))
         webview.src = `data:${obj.mimeType},${dochtml}`
 
         // WRITE ABOUT WHY WE COULDN'T DO THIS
@@ -230,12 +240,8 @@ document.addEventListener("DOMContentLoaded", (ev) => {
   go.addEventListener("click", (ev) => {
     var url = document.getElementById("website").value.trim()
     urlMagic(url, (doc) => {
-
+      console.log(`Page loaded: ${url}`);
     })
-    // webview.src = url
-    // webview.stop()
-    // console.log(webview.contentWindow)
-
   })
 
   clear.addEventListener("click", (ev) => {

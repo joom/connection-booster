@@ -12,6 +12,7 @@
     "webview",
     "unlimitedStorage",
     "notifications",
+    "externally_connectable",
     "<all_urls>",
     "*://*/*",
     "http://*/*",
