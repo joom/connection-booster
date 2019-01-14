@@ -119,7 +119,7 @@ const socketMagic = (urlString, cb) => {
           try {
             // try closing just in case, it's fine if the socket is already closed
             chrome.sockets.tcp.disconnect(socketId)
-          }
+          } catch(err) {}
           if (sockets[urlString]) {
             activeSockets--
             delete sockets[urlString]
