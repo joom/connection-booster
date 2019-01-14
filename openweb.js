@@ -5,7 +5,7 @@ dec.encoding = "utf-8"
 
 // Takes the first chunk of an HTTP response,
 // parses the headers and the body to an object.
-var parseHeaders = (res) => {
+const parseHeaders = (res) => {
   var obj = {headers: {}}
   var s = "\r\n\r\n"
   var ind = res.indexOf(s)
@@ -40,7 +40,7 @@ var parseHeaders = (res) => {
 // Takes a URL string, opens a TCP connection, sends an HTTP request, receives
 // an HTTP response and parses it. The callback function takes the response
 // body as a string, and the parsed object from the initial chunk.
-var socketMagic = (urlString, cb) => {
+const socketMagic = (urlString, cb) => {
   var url = new URL(urlString)
   if (url.protocol !== "http:") {
     return
@@ -96,11 +96,16 @@ var socketMagic = (urlString, cb) => {
     })
   })
 }
+const getBase64 = (file, cb) => {
+  const reader = new FileReader();
+  reader.addEventListener("load", () => cb(reader.result));
+  reader.readAsDataURL(file);
+}
 
 // Takes an absolute base URL (the page that the browser is looking at),
 // the response body as a string, the MIME type,
 // and a callback that takes a document.
-var domMagic = (baseURL, body, mimeType, cb) => {
+const domMagic = (baseURL, body, mimeType, cb) => {
   var parser = new DOMParser()
   var doc = parser.parseFromString(body, mimeType)
 
@@ -130,8 +135,13 @@ var domMagic = (baseURL, body, mimeType, cb) => {
 
     parallelFns.push(function (callback) {
       socketMagic(addr, (body, obj) => {
-        sourcemap[addr] = `data:${obj.mimeType},${body}`
-        callback(null, {})
+        getBase64(new Blob([body], {type : obj.mimeType}), (b) => {
+          sourcemap[addr] = b
+          callback(null, {})
+        })
+
+        // sourcemap[addr] = `data:${obj.mimeType},${body}`
+        // callback(null, {})
       })
     })
   })
@@ -148,7 +158,7 @@ var domMagic = (baseURL, body, mimeType, cb) => {
 
 // Takes a URL, does all the connection stuff and updates the WebView,
 // then calls the callback which takes a document.
-var urlMagic = (url, cb) => {
+const urlMagic = (url, cb) => {
   socketMagic(url, (body, obj) => {
     var webview = document.querySelector("webview")
     webview.src = `data:${obj.mimeType},${body}`
