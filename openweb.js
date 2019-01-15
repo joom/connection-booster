@@ -104,7 +104,7 @@ const socketMagic = (urlString, cb) => {
           // console.log(`Chunk #${chunk}, ${len}/${totalLen}, loaded ${((len / totalLen) * 100).toFixed(1)}% of file: ${url.pathname}, active ${activeSockets}`)
 
           if (len >= totalLen) {
-            chrome.sockets.tcp.onReceive.removeListener(listener)
+            //chrome.sockets.tcp.onReceive.removeListener(listener)
             try {
               chrome.sockets.tcp.disconnect(socketId)
             } catch (e) {}
@@ -122,16 +122,12 @@ const socketMagic = (urlString, cb) => {
         chrome.sockets.tcp.onReceive.addListener(listener)
 
         var listenerError = (errInfo) => {
-          chrome.sockets.tcp.onReceive.removeListener(listener)
-          chrome.sockets.tcp.onReceive.removeListener(listenerError)
-          try {
-            // try closing just in case, it's fine if the socket is already closed
-            chrome.sockets.tcp.disconnect(socketId)
-          } catch(err) {}
-          if (sockets[urlString]) {
-            activeSockets--
-            delete sockets[urlString]
-          }
+          //chrome.sockets.tcp.onReceive.removeListener(listener)
+          //chrome.sockets.tcp.onReceive.removeListener(listenerError)
+          // if (sockets[urlString]) {
+//             activeSockets--
+//             delete sockets[urlString]
+//           }
         }
         chrome.sockets.tcp.onReceiveError.addListener(listenerError)
       })
@@ -207,6 +203,8 @@ const domMagic = (baseURL, body, cb) => {
   console.log(`Starting to download ${parallelFns.length} files in parallel, with max ${limit} at a time`)
 
   runParallelLimit(parallelFns, limit, function (err, results) {
+	console.log(err)
+	console.log(results)
     // now all resources have been downloaded
     console.log('All downloads finished, sourcemap filled')
     // console.log(sourcemap)
