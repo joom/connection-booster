@@ -199,7 +199,12 @@ const domMagic = (baseURL, body, cb) => {
     })
   })
 
-  var limit = parseInt(document.querySelector('#parallel').value)
+  var limit
+  if (document.querySelector('#parallel1').checked) {
+    limit = parallelFns.length / 2
+  } else {
+    limit = parseInt(document.querySelector('#parallel').value)
+  }
   console.log(`Starting to download ${parallelFns.length} files in parallel, with max ${limit} at a time`)
 
   runParallelLimit(parallelFns, limit, function (err, results) {
